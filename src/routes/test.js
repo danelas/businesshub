@@ -111,7 +111,7 @@ router.get('/dashboard', async (req, res) => {
                 const response = await fetch('/api/test/florida-stats');
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    throw new Error('HTTP ' + response.status + ': ' + response.statusText);
                 }
                 
                 const data = await response.json();
@@ -120,6 +120,9 @@ router.get('/dashboard', async (req, res) => {
                 if (data.success) {
                     updateStats(data.stats);
                     updateTable(data.leads);
+                } else {
+                    console.error('API returned error:', data.error);
+                    document.getElementById('totalLLCs').textContent = 'Error';
                 }
             } catch (err) {
                 console.error('Failed to load data:', err);
@@ -169,7 +172,7 @@ router.get('/dashboard', async (req, res) => {
                 const result = await response.json();
                 
                 if (result.success) {
-                    alert(\`Sync completed! Processed \${result.processed} records.\`);
+                    alert('Sync completed! Processed ' + result.processed + ' records.');
                     refreshData();
                 } else {
                     alert('Sync failed: ' + result.error);
@@ -192,7 +195,7 @@ router.get('/dashboard', async (req, res) => {
                 const result = await response.json();
                 
                 if (result.success) {
-                    alert(\`Enrichment completed! Found contacts for \${result.enriched} leads.\`);
+                    alert('Enrichment completed! Found contacts for ' + result.enriched + ' leads.');
                     refreshData();
                 } else {
                     alert('Enrichment failed: ' + result.error);
