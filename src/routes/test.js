@@ -278,6 +278,17 @@ router.post('/sync-florida', async (req, res) => {
   }
 });
 
+// Debug database connection
+router.get('/debug-db', async (req, res) => {
+  res.json({
+    DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT SET',
+    DB_HOST: process.env.DB_HOST || 'NOT SET',
+    NODE_ENV: process.env.NODE_ENV,
+    // Don't expose full URL for security, just show if it's set
+    url_preview: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 20) + '...' : 'MISSING'
+  });
+});
+
 // Test contact enrichment (mock mode)
 router.post('/enrich-contacts', async (req, res) => {
   try {
