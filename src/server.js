@@ -149,22 +149,32 @@ process.on('SIGINT', async () => {
 // Start server
 const startServer = async () => {
   try {
-    // Test database connection
+    // Test database connection (but don't fail if it's not ready)
     const dbConnected = await testConnection();
-    if (!dbConnected) {
-      throw new Error('Database connection failed');
-    }
-
+    
     app.listen(PORT, () => {
       logger.info(`Server started on port ${PORT}`, {
         port: PORT,
         environment: process.env.NODE_ENV || 'development',
-        database: 'connected'
+        database: dbConnected ? 'connected' : 'disconnected'
       });
+      
+      if (!dbConnected) {
+        logger.warn('Database not connected at startup. Will retry on requests.');
+      }
     });
   } catch (err) {
     logger.error('Failed to start server', { error: err.message });
-    process.exit(1);
+    
+    // In production, try to start anyway (database might come online later)
+    if (process.env.NODE_ENV === 'production') {
+      logger.info('Starting server without database connection (production mode)');
+      app.listen(PORT, () => {
+        logger.info(`Server started on port ${PORT} (database disconnected)`);
+      });
+    } else {
+      process.exit(1);
+    }
   }
 };
 

@@ -5,7 +5,7 @@ services:
     env: node
     plan: starter
     runtime: node20
-    buildCommand: npm install
+    buildCommand: npm install && npm run migrate && npm run setup-florida
     startCommand: npm start
     envVars:
       - key: NODE_ENV
