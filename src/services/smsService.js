@@ -1,9 +1,9 @@
-const TextMagic = require('textmagic-rest-nodejs');
+const TextMagicRestClient = require('textmagic-rest-client');
 const { query, logger } = require('../database/connection');
 
 class SMSService {
   constructor() {
-    this.client = new TextMagic.TextmagicRestClient(
+    this.client = new TextMagicRestClient(
       process.env.TEXTMAGIC_USERNAME,
       process.env.TEXTMAGIC_API_KEY
     );
