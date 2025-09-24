@@ -1,0 +1,71 @@
+services:
+  # Main web service
+  - type: web
+    name: llc-lead-generator-api
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: llc-leads-db
+          property: connectionString
+      - key: TEXTMAGIC_USERNAME
+        sync: false
+      - key: TEXTMAGIC_API_KEY
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        value: noreply@yourdomain.com
+      - key: FROM_PHONE
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: EIN_AFFILIATE_URL
+        sync: false
+      - key: BANKING_AFFILIATE_URL
+        sync: false
+      - key: ACCOUNTING_AFFILIATE_URL
+        sync: false
+      - key: INSURANCE_AFFILIATE_URL
+        sync: false
+      - key: UNSUBSCRIBE_URL
+        value: https://llc-lead-generator-api.onrender.com/unsubscribe
+    healthCheckPath: /health
+    
+  # Background worker service
+  - type: worker
+    name: llc-message-worker
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm run worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: llc-leads-db
+          property: connectionString
+      - key: TEXTMAGIC_USERNAME
+        sync: false
+      - key: TEXTMAGIC_API_KEY
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        value: noreply@yourdomain.com
+      - key: FROM_PHONE
+        sync: false
+
+databases:
+  - name: llc-leads-db
+    plan: starter
+    databaseName: llc_leads
+    user: llc_user

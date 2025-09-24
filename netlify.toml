@@ -1,0 +1,11 @@
+# This project is designed for Render deployment, not Netlify
+# See render.yaml for the actual deployment configuration
+
+[build]
+  command = "echo 'This project uses Render for deployment'"
+  publish = "."
+
+[[redirects]]
+  from = "/*"
+  to = "https://llc-lead-generator-api.onrender.com/:splat"
+  status = 301
