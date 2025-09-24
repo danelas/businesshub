@@ -4,8 +4,20 @@ const SMSService = require('../services/smsService');
 const { query, logger } = require('../database/connection');
 
 const router = express.Router();
-const emailService = new EmailService();
-const smsService = new SMSService();
+
+// Lazy-load services to avoid initialization errors
+let emailService = null;
+let smsService = null;
+
+const getEmailService = () => {
+  if (!emailService) emailService = new EmailService();
+  return emailService;
+};
+
+const getSMSService = () => {
+  if (!smsService) smsService = new SMSService();
+  return smsService;
+};
 
 // SendGrid webhook endpoint
 router.post('/sendgrid', async (req, res) => {
@@ -21,7 +33,7 @@ router.post('/sendgrid', async (req, res) => {
 
     logger.info('Received SendGrid webhook', { eventCount: events.length });
 
-    const results = await emailService.handleWebhook(events);
+    const results = await getEmailService().handleWebhook(events);
     
     res.json({
       success: true,
@@ -64,7 +76,7 @@ router.post('/textmagic', async (req, res) => {
     }
 
     const messageId = messageResult.rows[0].id;
-    const newStatus = smsService.mapProviderStatus(status);
+    const newStatus = getSMSService().mapProviderStatus(status);
     
     if (newStatus) {
       await query(`
@@ -110,14 +122,14 @@ router.post('/unsubscribe', async (req, res) => {
     if (type === 'sms' || type === 'all') {
       const phoneToOptOut = phone || (leadData && leadData.phone);
       if (phoneToOptOut) {
-        await smsService.handleOptOut(phoneToOptOut, lead);
+        await getSMSService().handleOptOut(phoneToOptOut, lead);
       }
     }
 
     if (type === 'email' || type === 'all') {
       const emailToOptOut = email || (leadData && leadData.email);
       if (emailToOptOut) {
-        await emailService.handleOptOut(emailToOptOut, lead);
+        await getEmailService().handleOptOut(emailToOptOut, lead);
       }
     }
 
@@ -160,7 +172,7 @@ router.post('/sms-reply', async (req, res) => {
       const leadResult = await query('SELECT id FROM leads WHERE phone = $1', [from]);
       const leadId = leadResult.rows.length > 0 ? leadResult.rows[0].id : null;
       
-      await smsService.handleOptOut(from, leadId);
+      await getSMSService().handleOptOut(from, leadId);
       
       // Log the reply
       await query(`
@@ -348,7 +360,7 @@ router.post('/opt-out/manual', async (req, res) => {
       }
       
       if (phoneToOptOut) {
-        const result = await smsService.handleOptOut(phoneToOptOut, leadId);
+        const result = await getSMSService().handleOptOut(phoneToOptOut, leadId);
         results.push({ type: 'sms', ...result });
       }
     }
@@ -364,7 +376,7 @@ router.post('/opt-out/manual', async (req, res) => {
       }
       
       if (emailToOptOut) {
-        const result = await emailService.handleOptOut(emailToOptOut, leadId);
+        const result = await getEmailService().handleOptOut(emailToOptOut, leadId);
         results.push({ type: 'email', ...result });
       }
     }

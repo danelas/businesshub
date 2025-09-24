@@ -15,8 +15,10 @@ class MessageWorker {
     this.sequenceService = new SequenceCampaignService();
     this.floridaService = new FloridaDataService();
     this.enrichmentService = new ContactEnrichmentService();
-    this.smsService = new SMSService();
-    this.emailService = new EmailService();
+    
+    // Lazy-load services to avoid initialization errors
+    this._smsService = null;
+    this._emailService = null;
     
     this.isRunning = false;
     this.dailyMessageCount = 0;
@@ -31,6 +33,21 @@ class MessageWorker {
       batchSize: 10,
       autoCampaignEnabled: true
     };
+  }
+
+  // Lazy getters for services
+  get smsService() {
+    if (!this._smsService) {
+      this._smsService = new SMSService();
+    }
+    return this._smsService;
+  }
+
+  get emailService() {
+    if (!this._emailService) {
+      this._emailService = new EmailService();
+    }
+    return this._emailService;
   }
 
   // Initialize worker and start cron jobs

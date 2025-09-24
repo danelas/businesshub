@@ -16,6 +16,7 @@ const floridaRoutes = require('./routes/florida');
 const webhooksRoutes = require('./routes/webhooks');
 const statsRoutes = require('./routes/stats');
 const adminRoutes = require('./routes/admin');
+const testRoutes = require('./routes/test');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -55,6 +56,7 @@ app.use('/api/florida', floridaRoutes);
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/test', testRoutes);
 
 // Serve static files for unsubscribe pages
 app.use('/static', express.static(path.join(__dirname, 'public')));

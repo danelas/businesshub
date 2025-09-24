@@ -6,8 +6,20 @@ const { query, logger } = require('../database/connection');
 
 const router = express.Router();
 const messageGeneration = new MessageGenerationService();
-const smsService = new SMSService();
-const emailService = new EmailService();
+
+// Lazy-load services to avoid initialization errors
+let smsService = null;
+let emailService = null;
+
+const getSMSService = () => {
+  if (!smsService) smsService = new SMSService();
+  return smsService;
+};
+
+const getEmailService = () => {
+  if (!emailService) emailService = new EmailService();
+  return emailService;
+};
 
 // Get messages with filtering and pagination
 router.get('/', async (req, res) => {
@@ -246,9 +258,9 @@ router.post('/:id/send', async (req, res) => {
     let result;
 
     if (message.message_type === 'sms') {
-      result = await smsService.sendSMS(id);
+      result = await getSMSService().sendSMS(id);
     } else if (message.message_type === 'email') {
-      result = await emailService.sendEmail(id);
+      result = await getEmailService().sendEmail(id);
     } else {
       return res.status(400).json({
         success: false,
@@ -285,9 +297,9 @@ router.post('/send-bulk', async (req, res) => {
     let result;
 
     if (messageType === 'sms') {
-      result = await smsService.sendBulkSMS(messageIds, options);
+      result = await getSMSService().sendBulkSMS(messageIds, options);
     } else if (messageType === 'email') {
-      result = await emailService.sendBulkEmail(messageIds, options);
+      result = await getEmailService().sendBulkEmail(messageIds, options);
     } else {
       return res.status(400).json({
         success: false,
@@ -326,7 +338,7 @@ router.get('/:id/status', async (req, res) => {
     let result;
 
     if (messageType === 'sms') {
-      result = await smsService.checkDeliveryStatus(id);
+      result = await getSMSService().checkDeliveryStatus(id);
     } else {
       // For email, just return current status from database
       const statusResult = await query(`
@@ -474,8 +486,8 @@ router.get('/stats/overview', async (req, res) => {
   try {
     const { days = 30, campaignId } = req.query;
     
-    const smsStats = await smsService.getSMSStats(parseInt(days));
-    const emailStats = await emailService.getEmailStats(parseInt(days));
+    const smsStats = await getSMSService().getSMSStats(parseInt(days));
+    const emailStats = await getEmailService().getEmailStats(parseInt(days));
     
     res.json({
       success: true,

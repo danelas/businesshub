@@ -3,7 +3,12 @@ const { query, logger } = require('../database/connection');
 
 class EmailService {
   constructor() {
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    this.apiKey = process.env.SENDGRID_API_KEY;
+    if (this.apiKey && this.apiKey.startsWith('SG.')) {
+      sgMail.setApiKey(this.apiKey);
+    } else {
+      console.warn('SendGrid API key not configured or invalid. Email functionality will be disabled.');
+    }
     this.fromEmail = process.env.FROM_EMAIL || 'noreply@yourdomain.com';
     this.maxRetries = 3;
     this.retryDelay = 5000; // 5 seconds
@@ -12,6 +17,11 @@ class EmailService {
   // Send email message
   async sendEmail(messageId) {
     try {
+      // Check if SendGrid is configured
+      if (!this.apiKey || !this.apiKey.startsWith('SG.')) {
+        throw new Error('SendGrid API key not configured. Email functionality is disabled.');
+      }
+
       // Get message details
       const messageResult = await query('SELECT * FROM messages WHERE id = $1', [messageId]);
       if (messageResult.rows.length === 0) {

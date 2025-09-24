@@ -4,6 +4,7 @@ services:
     name: llc-lead-generator-api
     env: node
     plan: starter
+    runtime: node20
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -44,6 +45,7 @@ services:
     name: llc-message-worker
     env: node
     plan: starter
+    runtime: node20
     buildCommand: npm install
     startCommand: npm run worker
     envVars:
