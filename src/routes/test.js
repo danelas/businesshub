@@ -10,6 +10,13 @@ const router = express.Router();
 // Test dashboard - view all Florida LLC data
 router.get('/dashboard', async (req, res) => {
   try {
+    // Prevent caching
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
     const html = `
 <!DOCTYPE html>
 <html>
@@ -44,7 +51,8 @@ router.get('/dashboard', async (req, res) => {
     <div class="container">
         <div class="header">
             <h1>🏢 Florida LLC Test Dashboard</h1>
-            <p>Monitor Florida LLC data ingestion and contact enrichment</p>
+            <p>Real-time monitoring of Florida LLC data ingestion and contact enrichment</p>
+            <p><small>Last loaded: ${new Date().toLocaleString()}</small></p>
         </div>
 
         <div class="stats" id="stats">
@@ -99,8 +107,15 @@ router.get('/dashboard', async (req, res) => {
 
         async function refreshData() {
             try {
+                console.log('Refreshing dashboard data...');
                 const response = await fetch('/api/test/florida-stats');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
+                console.log('Dashboard data received:', data);
                 
                 if (data.success) {
                     updateStats(data.stats);
@@ -298,11 +313,16 @@ router.get('/debug-db', async (req, res) => {
 // Combined Yelp + Google contact enrichment
 router.post('/enrich-contacts', async (req, res) => {
   try {
+    logger.info('Enrichment request started');
+    
     // Check if at least one API key is configured
     const hasYelp = !!process.env.YELP_API_KEY;
     const hasGoogle = !!process.env.GOOGLE_API_KEY && !!process.env.GOOGLE_SEARCH_ENGINE_ID;
     
+    logger.info('API key status', { hasYelp, hasGoogle });
+    
     if (!hasYelp && !hasGoogle) {
+      logger.error('No API keys configured');
       return res.status(400).json({
         success: false,
         error: 'No API keys configured. Please add YELP_API_KEY and/or GOOGLE_API_KEY + GOOGLE_SEARCH_ENGINE_ID to environment variables.'
@@ -310,6 +330,7 @@ router.post('/enrich-contacts', async (req, res) => {
     }
 
     // Get leads without contact info
+    logger.info('Querying for leads to enrich');
     const leadsResult = await query(`
       SELECT id, company_name, city, state 
       FROM leads 
@@ -321,7 +342,10 @@ router.post('/enrich-contacts', async (req, res) => {
       LIMIT 8
     `);
 
+    logger.info('Found leads for enrichment', { count: leadsResult.rows.length });
+
     if (leadsResult.rows.length === 0) {
+      logger.info('No leads found that need enrichment');
       return res.json({
         success: true,
         message: 'No leads found that need enrichment',
@@ -335,17 +359,27 @@ router.post('/enrich-contacts', async (req, res) => {
     logger.info('Starting combined enrichment', { 
       leadCount: leadsResult.rows.length,
       hasYelp,
-      hasGoogle 
+      hasGoogle,
+      leads: leadsResult.rows.map(l => ({ id: l.id, name: l.company_name, city: l.city }))
     });
 
-    const combinedService = new CombinedEnrichmentService();
-    const leadIds = leadsResult.rows.map(lead => lead.id);
+    try {
+      const combinedService = new CombinedEnrichmentService();
+      const leadIds = leadsResult.rows.map(lead => lead.id);
 
-    // Use combined enrichment with rate limiting
-    const result = await combinedService.enrichMultipleLeads(leadIds, {
-      batchSize: 2, // Small batches to respect API rate limits
-      delayBetweenBatches: 4000 // 4 second delay between batches
-    });
+      logger.info('Created combined service, starting enrichment');
+
+      // Use combined enrichment with rate limiting
+      const result = await combinedService.enrichMultipleLeads(leadIds, {
+        batchSize: 2, // Small batches to respect API rate limits
+        delayBetweenBatches: 4000 // 4 second delay between batches
+      });
+
+      logger.info('Enrichment completed', { result });
+    } catch (enrichmentError) {
+      logger.error('Enrichment service error', { error: enrichmentError.message, stack: enrichmentError.stack });
+      throw enrichmentError;
+    }
 
     res.json({
       success: true,
@@ -370,6 +404,75 @@ router.post('/enrich-contacts', async (req, res) => {
 
   } catch (err) {
     logger.error('Combined enrichment error', { error: err.message });
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Simple test endpoint for debugging enrichment
+router.post('/test-enrichment', async (req, res) => {
+  try {
+    logger.info('Test enrichment endpoint called');
+    
+    // Check API keys
+    const hasYelp = !!process.env.YELP_API_KEY;
+    const hasGoogle = !!process.env.GOOGLE_API_KEY && !!process.env.GOOGLE_SEARCH_ENGINE_ID;
+    
+    logger.info('API status', { hasYelp, hasGoogle });
+    
+    // Get one lead for testing
+    const leadResult = await query(`
+      SELECT id, company_name, city, state 
+      FROM leads 
+      WHERE state = 'FL' 
+      LIMIT 1
+    `);
+    
+    if (leadResult.rows.length === 0) {
+      return res.json({ success: false, error: 'No leads found for testing' });
+    }
+    
+    const lead = leadResult.rows[0];
+    logger.info('Testing with lead', { lead });
+    
+    // Test just Yelp service first
+    if (hasYelp) {
+      try {
+        logger.info('Testing Yelp service');
+        const YelpService = require('../services/yelpEnrichmentService');
+        const yelpService = new YelpService();
+        
+        const yelpResult = await yelpService.enrichLead(lead.id);
+        logger.info('Yelp test result', { yelpResult });
+        
+        return res.json({
+          success: true,
+          message: 'Yelp test completed',
+          lead,
+          yelpResult,
+          hasYelp,
+          hasGoogle
+        });
+      } catch (yelpError) {
+        logger.error('Yelp test failed', { error: yelpError.message });
+        return res.json({
+          success: false,
+          error: `Yelp test failed: ${yelpError.message}`,
+          lead,
+          hasYelp,
+          hasGoogle
+        });
+      }
+    }
+    
+    return res.json({
+      success: false,
+      error: 'No API keys configured for testing',
+      hasYelp,
+      hasGoogle
+    });
+    
+  } catch (err) {
+    logger.error('Test enrichment error', { error: err.message, stack: err.stack });
     res.status(500).json({ success: false, error: err.message });
   }
 });
