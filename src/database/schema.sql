@@ -169,22 +169,22 @@ CREATE TABLE system_settings (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_leads_state ON leads(state);
-CREATE INDEX idx_leads_business_type ON leads(business_type);
-CREATE INDEX idx_leads_registration_date ON leads(registration_date);
-CREATE INDEX idx_leads_status ON leads(status);
-CREATE INDEX idx_leads_dedup_hash ON leads(dedup_hash);
-CREATE INDEX idx_leads_import_date ON leads(import_date);
+CREATE INDEX IF NOT EXISTS idx_leads_state ON leads(state);
+CREATE INDEX IF NOT EXISTS idx_leads_business_type ON leads(business_type);
+CREATE INDEX IF NOT EXISTS idx_leads_registration_date ON leads(registration_date);
+CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+CREATE INDEX IF NOT EXISTS idx_leads_dedup_hash ON leads(dedup_hash);
+CREATE INDEX IF NOT EXISTS idx_leads_import_date ON leads(import_date);
 
-CREATE INDEX idx_messages_lead_id ON messages(lead_id);
-CREATE INDEX idx_messages_type ON messages(message_type);
-CREATE INDEX idx_messages_status ON messages(status);
-CREATE INDEX idx_messages_sent_at ON messages(sent_at);
-CREATE INDEX idx_messages_campaign_id ON messages(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_messages_lead_id ON messages(lead_id);
+CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(message_type);
+CREATE INDEX IF NOT EXISTS idx_messages_status ON messages(status);
+CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON messages(sent_at);
+CREATE INDEX IF NOT EXISTS idx_messages_campaign_id ON messages(campaign_id);
 
-CREATE INDEX idx_opt_outs_phone ON opt_outs(phone);
-CREATE INDEX idx_opt_outs_email ON opt_outs(email);
-CREATE INDEX idx_opt_outs_type ON opt_outs(opt_out_type);
+CREATE INDEX IF NOT EXISTS idx_opt_outs_phone ON opt_outs(phone);
+CREATE INDEX IF NOT EXISTS idx_opt_outs_email ON opt_outs(email);
+CREATE INDEX IF NOT EXISTS idx_opt_outs_type ON opt_outs(opt_out_type);
 
 -- Triggers for updated_at timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()

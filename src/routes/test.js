@@ -2,6 +2,8 @@ const express = require('express');
 const { query, logger } = require('../database/connection');
 const FloridaDataService = require('../services/floridaDataService');
 const ContactEnrichmentService = require('../services/contactEnrichmentService');
+const YelpEnrichmentService = require('../services/yelpEnrichmentService');
+const CombinedEnrichmentService = require('../services/combinedEnrichmentService');
 
 const router = express.Router();
 
@@ -66,7 +68,7 @@ router.get('/dashboard', async (req, res) => {
 
         <div class="controls">
             <button class="btn" onclick="triggerSync()">🔄 Sync Florida Data</button>
-            <button class="btn btn-success" onclick="enrichContacts()">📞 Enrich Contacts (Test Mode)</button>
+            <button class="btn btn-success" onclick="enrichContacts()">📞 Enrich Contacts (Yelp + Google)</button>
             <button class="btn btn-warning" onclick="refreshData()">🔄 Refresh Dashboard</button>
         </div>
 
@@ -183,7 +185,7 @@ router.get('/dashboard', async (req, res) => {
             } catch (err) {
                 alert('Enrichment failed: ' + err.message);
             } finally {
-                btn.textContent = '📞 Enrich Contacts (Test Mode)';
+                btn.textContent = '📞 Enrich Contacts (Yelp + Google)';
                 btn.disabled = false;
             }
         }
@@ -282,82 +284,92 @@ router.post('/sync-florida', async (req, res) => {
 router.get('/debug-db', async (req, res) => {
   res.json({
     DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT SET',
-    DB_HOST: process.env.DB_HOST || 'NOT SET',
+    YELP_API_KEY: process.env.YELP_API_KEY ? 'SET' : 'NOT SET',
+    GOOGLE_API_KEY: process.env.GOOGLE_API_KEY ? 'SET' : 'NOT SET',
+    GOOGLE_SEARCH_ENGINE_ID: process.env.GOOGLE_SEARCH_ENGINE_ID ? 'SET' : 'NOT SET',
     NODE_ENV: process.env.NODE_ENV,
-    // Don't expose full URL for security, just show if it's set
-    url_preview: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 20) + '...' : 'MISSING'
+    // Don't expose full keys for security, just show if they're set
+    url_preview: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 20) + '...' : 'MISSING',
+    yelp_preview: process.env.YELP_API_KEY ? process.env.YELP_API_KEY.substring(0, 10) + '...' : 'MISSING',
+    google_preview: process.env.GOOGLE_API_KEY ? process.env.GOOGLE_API_KEY.substring(0, 10) + '...' : 'MISSING'
   });
 });
 
-// Test contact enrichment (mock mode)
+// Combined Yelp + Google contact enrichment
 router.post('/enrich-contacts', async (req, res) => {
   try {
+    // Check if at least one API key is configured
+    const hasYelp = !!process.env.YELP_API_KEY;
+    const hasGoogle = !!process.env.GOOGLE_API_KEY && !!process.env.GOOGLE_SEARCH_ENGINE_ID;
+    
+    if (!hasYelp && !hasGoogle) {
+      return res.status(400).json({
+        success: false,
+        error: 'No API keys configured. Please add YELP_API_KEY and/or GOOGLE_API_KEY + GOOGLE_SEARCH_ENGINE_ID to environment variables.'
+      });
+    }
+
     // Get leads without contact info
     const leadsResult = await query(`
       SELECT id, company_name, city, state 
       FROM leads 
       WHERE state = 'FL' 
-        AND (phone IS NULL AND email IS NULL)
+        AND (phone IS NULL OR email IS NULL)
+        AND (enrichment_status IS NULL OR enrichment_status = 'pending' OR enrichment_status = 'failed')
         AND registration_date >= CURRENT_DATE - INTERVAL '7 days'
-      LIMIT 20
+      ORDER BY registration_date DESC
+      LIMIT 8
     `);
 
-    let enriched = 0;
-
-    // Mock enrichment - simulate finding contact info
-    for (const lead of leadsResult.rows) {
-      const mockPhone = this.generateMockPhone();
-      const mockEmail = this.generateMockEmail(lead.company_name);
-      const mockWebsite = this.generateMockWebsite(lead.company_name);
-
-      // Randomly decide if we "find" contact info (70% success rate)
-      const foundContact = Math.random() > 0.3;
-
-      if (foundContact) {
-        await query(`
-          UPDATE leads 
-          SET phone = $1, 
-              email = $2, 
-              website = $3,
-              enrichment_status = 'completed',
-              last_enrichment_attempt = CURRENT_TIMESTAMP,
-              contact_sources = $4
-          WHERE id = $5
-        `, [
-          mockPhone,
-          mockEmail, 
-          mockWebsite,
-          JSON.stringify(['mock_test_service']),
-          lead.id
-        ]);
-
-        // Log the enrichment
-        await query(`
-          INSERT INTO contact_enrichment_log 
-          (lead_id, phones_found, emails_found, website_found, sources, success, processing_time_ms)
-          VALUES ($1, 1, 1, 1, $2, true, 1500)
-        `, [lead.id, JSON.stringify(['mock_test_service'])]);
-
-        enriched++;
-      } else {
-        await query(`
-          UPDATE leads 
-          SET enrichment_status = 'failed',
-              last_enrichment_attempt = CURRENT_TIMESTAMP
-          WHERE id = $1
-        `, [lead.id]);
-      }
+    if (leadsResult.rows.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No leads found that need enrichment',
+        processed: 0,
+        enriched: 0,
+        phonesFound: 0,
+        emailsFound: 0
+      });
     }
+
+    logger.info('Starting combined enrichment', { 
+      leadCount: leadsResult.rows.length,
+      hasYelp,
+      hasGoogle 
+    });
+
+    const combinedService = new CombinedEnrichmentService();
+    const leadIds = leadsResult.rows.map(lead => lead.id);
+
+    // Use combined enrichment with rate limiting
+    const result = await combinedService.enrichMultipleLeads(leadIds, {
+      batchSize: 2, // Small batches to respect API rate limits
+      delayBetweenBatches: 4000 // 4 second delay between batches
+    });
 
     res.json({
       success: true,
-      message: 'Contact enrichment completed (test mode)',
-      processed: leadsResult.rows.length,
-      enriched: enriched
+      message: `Combined enrichment completed (Yelp: ${hasYelp ? 'ON' : 'OFF'}, Google: ${hasGoogle ? 'ON' : 'OFF'})`,
+      processed: result.total,
+      enriched: result.success,
+      failed: result.failed,
+      phonesFound: result.phonesFound,
+      emailsFound: result.emailsFound,
+      details: result.results.map(r => ({
+        leadId: r.leadId || (r.lead && r.lead.id),
+        success: r.success,
+        company: r.lead && r.lead.company_name,
+        phone: r.enrichmentData && r.enrichmentData.phone,
+        email: r.enrichmentData && r.enrichmentData.email,
+        website: r.enrichmentData && r.enrichmentData.website,
+        sources: r.enrichmentData && r.enrichmentData.sources.map(s => s.source),
+        processingTime: r.processingTime,
+        error: r.error
+      }))
     });
 
   } catch (err) {
-    logger.error('Test enrichment error', { error: err.message });
+    logger.error('Combined enrichment error', { error: err.message });
     res.status(500).json({ success: false, error: err.message });
   }
 });

@@ -13,6 +13,7 @@
     "load-templates": "node src/scripts/loadTemplates.js",
     "florida-sync": "node src/scripts/floridaSync.js",
     "setup-florida": "node src/database/migrate.js && node -e \"require('fs').readFileSync('src/database/florida_schema.sql', 'utf8').split(';').filter(s => s.trim()).forEach(sql => require('./src/database/connection').query(sql).catch(console.error))\"",
+    "setup-db": "node src/scripts/setupDatabase.js",
     "test-florida": "node test-florida-pipeline.js",
     "add-test-data": "node src/scripts/addTestData.js"
   },
